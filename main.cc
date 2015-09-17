@@ -146,7 +146,7 @@ extern hw_mesh *wire_hw_meshes[num_wire_types];
 sprite_metrics unlit_ui_slot_sprite, lit_ui_slot_sprite;
 
 GLuint pano_shot_fbo;
-GLuint pano_shot_rb;
+GLuint pano_shot_rbs[2];
 GLuint pano_shot_text;
 
 projectile_linear_manager proj_man;
@@ -530,27 +530,26 @@ init()
     glEnable(GL_DEPTH_TEST);
     glPolygonOffset(-0.1f, -0.1f);
 
-    glGenTextures(1, &pano_shot_text);
-    glBindTexture(GL_TEXTURE_2D, pano_shot_text);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, PANO_SHOT_RES, PANO_SHOT_RES, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     glGenFramebuffers(1, &pano_shot_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, pano_shot_fbo);
 
-    glGenRenderbuffers(1, &pano_shot_rb);
-    glBindRenderbuffer(GL_RENDERBUFFER, pano_shot_rb);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, PANO_SHOT_RES, PANO_SHOT_RES);
+    glGenRenderbuffers(2, pano_shot_rbs);
+
+    glBindRenderbuffer(GL_RENDERBUFFER, pano_shot_rbs[0]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB, PANO_SHOT_RES, PANO_SHOT_RES);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, pano_shot_rbs[0]);
+
+    glBindRenderbuffer(GL_RENDERBUFFER, pano_shot_rbs[1]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, PANO_SHOT_RES, PANO_SHOT_RES);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, pano_shot_rbs[1]);
+
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pano_shot_text, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, pano_shot_rb);
-
-    auto status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    //Does the GPU support current FBO configuration?
+    if (GL_FRAMEBUFFER_COMPLETE != glCheckFramebufferStatus(GL_FRAMEBUFFER)) {
+        assert(false || !"FBO invalid.");
+    }
 
     mesher_init();
 
@@ -1762,8 +1761,7 @@ bool save_png_libpng(const char *filename, uint8_t *pixels, unsigned w, unsigned
 // is_pano > 0 for pano, == 0 for no pano
 void write_screenshot(const time_t &time, unsigned is_pano) {
     // make it
-    auto pixels = new GLubyte[3 * wnd.width * wnd.height];
-    auto line = new GLubyte[3 * wnd.width];
+    auto pixels = new GLubyte[3 * PANO_SHOT_RES * PANO_SHOT_RES];
 
     // choose it
     glReadBuffer(GL_COLOR_ATTACHMENT0);
@@ -1786,11 +1784,10 @@ void write_screenshot(const time_t &time, unsigned is_pano) {
     }
 
     // write it
-    save_png_libpng(filename, pixels, wnd.width, wnd.height);
+    save_png_libpng(filename, pixels, PANO_SHOT_RES, PANO_SHOT_RES);
 
     // now remove it
     delete[] pixels;
-    delete[] line;
 }
 
 void take_pano_screenshot() {
@@ -1875,6 +1872,8 @@ void take_pano_screenshot() {
 
 void take_screenshot() {
     bool old_draw_hud;
+    unsigned old_width;
+    unsigned old_height;
     time_t time;
 
     if (!screenshot_requested)
@@ -1882,16 +1881,29 @@ void take_screenshot() {
 
     time = std::time(nullptr);
     old_draw_hud = draw_hud;
-    draw_hud = false;
+    old_width = wnd.width;
+    old_height = wnd.height;
+    wnd.width = PANO_SHOT_RES;
+    wnd.height = PANO_SHOT_RES;
+    draw_hud = true;
     
     glBindFramebuffer(GL_FRAMEBUFFER, pano_shot_fbo);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glViewport(0, 0, PANO_SHOT_RES, PANO_SHOT_RES);
+
     render();
 
-    draw_hud = old_draw_hud;
-    screenshot_requested = false;
-
     write_screenshot(time, 0);
+
+    draw_hud = old_draw_hud;
+    wnd.width = old_width;
+    wnd.height = old_height;
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDrawBuffer(GL_BACK);
+    glViewport(0, 0, wnd.width, wnd.height);
+
+    screenshot_requested = false;
 }
 
 struct play_state : game_state {
