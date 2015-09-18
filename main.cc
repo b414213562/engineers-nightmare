@@ -38,7 +38,7 @@
 #define APP_NAME        "Engineer's Nightmare"
 #define DEFAULT_WIDTH   1024
 #define DEFAULT_HEIGHT  768
-#define PANO_SHOT_RES   4000
+#define PANO_SHOT_RES   2000
 
 
 #define WORLD_TEXTURE_DIMENSION     32
