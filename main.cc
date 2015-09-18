@@ -536,11 +536,11 @@ init()
     glGenRenderbuffers(2, pano_shot_rbs);
 
     glBindRenderbuffer(GL_RENDERBUFFER, pano_shot_rbs[0]);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB, PANO_SHOT_RES, PANO_SHOT_RES);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, PANO_SHOT_RES, PANO_SHOT_RES);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, pano_shot_rbs[0]);
 
     glBindRenderbuffer(GL_RENDERBUFFER, pano_shot_rbs[1]);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, PANO_SHOT_RES, PANO_SHOT_RES);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, PANO_SHOT_RES, PANO_SHOT_RES);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, pano_shot_rbs[1]);
 
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
@@ -1733,13 +1733,6 @@ bool save_png_libpng(const char *filename, uint8_t *pixels, unsigned w, unsigned
     png_init_io(png, fp);
     png_set_IHDR(png, info, w, h, 8 /* depth */, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
         PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
-    auto palette = (png_colorp)png_malloc(png, PNG_MAX_PALETTE_LENGTH * sizeof(png_color));
-    if (!palette) {
-        fclose(fp);
-        png_destroy_write_struct(&png, &info);
-        return false;
-    }
-    png_set_PLTE(png, info, palette, PNG_MAX_PALETTE_LENGTH);
     png_write_info(png, info);
     png_set_packing(png);
 
@@ -1749,7 +1742,7 @@ bool save_png_libpng(const char *filename, uint8_t *pixels, unsigned w, unsigned
 
     png_write_image(png, rows);
     png_write_end(png, info);
-    png_free(png, palette);
+    png_free(png, nullptr);
     png_destroy_write_struct(&png, &info);
 
     fclose(fp);
@@ -1761,14 +1754,27 @@ bool save_png_libpng(const char *filename, uint8_t *pixels, unsigned w, unsigned
 // is_pano > 0 for pano, == 0 for no pano
 void write_screenshot(const time_t &time, unsigned is_pano) {
     // make it
-    auto pixels = new GLubyte[3 * PANO_SHOT_RES * PANO_SHOT_RES];
+    auto pixels = new GLubyte[4 * PANO_SHOT_RES * PANO_SHOT_RES];
 
     // choose it
     glReadBuffer(GL_COLOR_ATTACHMENT0);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
     // grab it
-    glReadPixels(0, 0, PANO_SHOT_RES, PANO_SHOT_RES, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+    glReadPixels(0, 0, PANO_SHOT_RES, PANO_SHOT_RES, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    /* can't figure out how to get libpng to save rgba
+     * so coerce pixels into rgb
+     */
+    auto tx = 0u;
+    for (auto y = 0u; y < PANO_SHOT_RES; ++y) {
+        for (auto x = 0u; x < PANO_SHOT_RES * 4; x += 4) {
+            pixels[tx + 0] = pixels[y * PANO_SHOT_RES * 4 + x + 0];
+            pixels[tx + 1] = pixels[y * PANO_SHOT_RES * 4 + x + 1];
+            pixels[tx + 2] = pixels[y * PANO_SHOT_RES * 4 + x + 2];
+            tx += 3;
+        }
+    }
 
     // time it
     char buf[256];
@@ -1888,8 +1894,10 @@ void take_screenshot() {
     draw_hud = true;
     
     glBindFramebuffer(GL_FRAMEBUFFER, pano_shot_fbo);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glViewport(0, 0, PANO_SHOT_RES, PANO_SHOT_RES);
+
+    GLfloat clear = 1;
+    glClearBufferfv(GL_DEPTH, 0, &clear);
 
     render();
 
@@ -1900,7 +1908,6 @@ void take_screenshot() {
     wnd.height = old_height;
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDrawBuffer(GL_BACK);
     glViewport(0, 0, wnd.width, wnd.height);
 
     screenshot_requested = false;
