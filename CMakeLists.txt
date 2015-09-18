@@ -8,6 +8,8 @@ endif()
 
 add_executable(nightmare main.cc)
 
+add_definitions(${PNG_DEFINITIONS})
+
 # here we compile all of src/*.cc into one library
 # this is used below to link both to our main executable
 # as well as to link to each of our tests
@@ -20,6 +22,7 @@ PKG_SEARCH_MODULE(EPOXY REQUIRED epoxy)
 PKG_SEARCH_MODULE(ASSIMP REQUIRED assimp)
 PKG_SEARCH_MODULE(SDL2_IMAGE REQUIRED SDL2_image)
 PKG_SEARCH_MODULE(FREETYPE REQUIRED freetype2)
+PKG_SEARCH_MODULE(LIBPNG REQUIRED libpng)
 
 find_package(Bullet REQUIRED)
 
@@ -32,7 +35,8 @@ include_directories(${SDL2_INCLUDE_DIRS}
                     ${SDL2_IMAGE_INCLUDE_DIRS}
                     ${BULLET_INCLUDE_DIRS}
                     ${FREETYPE_INCLUDE_DIRS}
-                    ${LIBCONFIG_INCLUDE_DIRS})
+                    ${LIBCONFIG_INCLUDE_DIRS}
+                    ${LIBPNG_INCLUDE_DIRS})
 
 target_link_libraries(nightmare
                       ${SDL2_LIBRARIES}
@@ -42,6 +46,7 @@ target_link_libraries(nightmare
                       ${BULLET_LIBRARIES}
                       ${FREETYPE_LIBRARIES}
                       ${LIBCONFIG_LIBRARIES}
+                      ${LIBPNG_LIBRARIES}
                       NIGHTMARE)
 
 # the following is based on
